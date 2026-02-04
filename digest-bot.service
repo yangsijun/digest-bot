@@ -1,0 +1,38 @@
+[Unit]
+# News Digest Bot - Systemd Service Unit
+# Automatically fetches news from multiple sources and sends daily digests via Telegram
+Description=News Digest Bot
+After=network.target
+
+[Service]
+# Service type and user configuration
+Type=simple
+User=digest-bot
+WorkingDirectory=/opt/digest-bot
+
+# Environment variables loaded from .env file
+# Required variables: TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, PRODUCTHUNT_CLIENT_ID, PRODUCTHUNT_CLIENT_SECRET
+EnvironmentFile=/opt/digest-bot/.env
+
+# Main process execution
+# Runs the digest bot with Python 3
+ExecStart=/usr/bin/python3 -m src.main
+
+# Restart policy for fault tolerance
+# Automatically restart on failure with 10-second delay between attempts
+Restart=on-failure
+RestartSec=10
+
+# Logging configuration
+# Sends stdout and stderr to systemd journal (viewable with journalctl)
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=digest-bot
+
+# Process management
+# Timeout for graceful shutdown (30 seconds)
+TimeoutStopSec=30
+
+[Install]
+# Enable service to start on system boot
+WantedBy=multi-user.target
