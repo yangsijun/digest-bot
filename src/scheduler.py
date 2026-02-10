@@ -14,9 +14,8 @@ from telegram.constants import ParseMode
 from src.config import TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, DATABASE_PATH
 from src.db import get_db_connection, init_db
 from src.fetchers import HNFetcher, GeekNewsFetcher, GitHubFetcher, ProductHuntFetcher
-from src.summarizer import summarize_article
 from src.dedup import prepare_batch_articles
-from src.bot.keyboards import get_article_keyboard
+from src.bot.keyboards import get_digest_list_keyboard
 
 logger = logging.getLogger("digest_bot")
 
@@ -123,55 +122,6 @@ def save_summary_to_db(
         conn.close()
 
 
-def format_digest_message(
-    article: dict[str, Any],
-    summary: str,
-    index: int,
-    total: int,
-) -> str:
-    source_emoji = {
-        "hn": "🔶",
-        "geeknews": "🇰🇷",
-        "github": "🐙",
-        "producthunt": "🚀",
-    }
-    source = article.get("source", "unknown")
-    emoji = source_emoji.get(source, "📰")
-
-    related_text = ""
-    if "related_urls" in article:
-        sources = [r.get("source", "?") for r in article["related_urls"]]
-        related_text = f"\n🔗 Also on: {', '.join(sources)}"
-
-    return (
-        f"<b>{emoji} [{index}/{total}] {article['title']}</b>\n\n"
-        f"{summary}\n"
-        f"{related_text}\n"
-        f'🔗 <a href="{article["url"]}">원문 보기</a>'
-    )
-
-
-async def send_digest_message(
-    bot: Bot,
-    chat_id: str,
-    article: dict[str, Any],
-    article_id: int,
-    summary: str,
-    index: int,
-    total: int,
-) -> None:
-    message_text = format_digest_message(article, summary, index, total)
-    keyboard = get_article_keyboard(article_id)
-
-    await bot.send_message(
-        chat_id=chat_id,
-        text=message_text,
-        parse_mode=ParseMode.HTML,
-        reply_markup=keyboard,
-        disable_web_page_preview=True,
-    )
-
-
 async def run_digest(batch: str) -> None:
     logger.info(f"Starting {batch} digest generation")
 
@@ -196,40 +146,45 @@ async def run_digest(batch: str) -> None:
             logger.info(f"Processing {len(articles)} articles for {batch} digest")
 
             bot = Bot(token=TELEGRAM_BOT_TOKEN)
-            total = len(articles)
 
-            batch_header = "🌅 아침" if batch == "morning" else "🌙 저녁"
+            saved: list[tuple[int, dict[str, Any]]] = []
+            for article in articles:
+                article_id = save_article_to_db(article, DATABASE_PATH)
+                saved.append((article_id, article))
+
+            source_emoji = {
+                "hn": "🔶",
+                "geeknews": "🇰🇷",
+                "github": "🐙",
+                "producthunt": "🚀",
+            }
+
+            batch_header = {
+                "morning": "🌅 아침",
+                "evening": "🌙 저녁",
+                "manual": "📋 수동",
+            }.get(batch, "📋")
+
+            lines = [f"<b>{batch_header} 테크 다이제스트</b>\n"]
+            for idx, (article_id, article) in enumerate(saved, 1):
+                source = article.get("source", "unknown")
+                emoji = source_emoji.get(source, "📰")
+                lines.append(f"{idx}. {emoji} {article['title']}")
+
+            lines.append(f"\n📰 {len(saved)}개 뉴스가 수집되었습니다.")
+            lines.append("아래 버튼을 눌러 요약을 확인하세요.")
+
+            keyboard = get_digest_list_keyboard(saved)
+
             await bot.send_message(
                 chat_id=TELEGRAM_CHAT_ID,
-                text=(
-                    f"<b>{batch_header} 테크 다이제스트</b>\n\n"
-                    f"📰 오늘의 뉴스 {total}개를 요약해서 보내드립니다."
-                ),
+                text="\n".join(lines),
                 parse_mode=ParseMode.HTML,
+                reply_markup=keyboard,
+                disable_web_page_preview=True,
             )
 
-            for idx, article in enumerate(articles, 1):
-                article_id = save_article_to_db(article, DATABASE_PATH)
-
-                summary = summarize_article(article)
-                if not summary:
-                    summary = "요약을 생성할 수 없습니다."
-
-                _ = save_summary_to_db(article_id, summary, batch, DATABASE_PATH)
-
-                await send_digest_message(
-                    bot,
-                    TELEGRAM_CHAT_ID,
-                    article,
-                    article_id,
-                    summary,
-                    idx,
-                    total,
-                )
-
-                await asyncio.sleep(1)
-
-            logger.info(f"Completed {batch} digest: sent {total} articles")
+            logger.info(f"Completed {batch} digest: listed {len(saved)} articles")
 
     except RuntimeError as e:
         logger.warning(f"Digest job skipped: {e}")

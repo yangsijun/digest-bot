@@ -16,6 +16,7 @@ from src.bot.handlers import (
     handle_translate_callback,
     handle_bookmark_callback,
     handle_related_callback,
+    handle_digest_item_callback,
     get_bookmarks,
 )
 from src.search import search_summaries
@@ -206,6 +207,9 @@ def create_application() -> Application:
     application.add_handler(CommandHandler("bookmarks", bookmarks_command))
     application.add_handler(CommandHandler("settings", settings_command))
 
+    application.add_handler(
+        CallbackQueryHandler(handle_digest_item_callback, pattern=r"^digest_item:")
+    )
     application.add_handler(
         CallbackQueryHandler(handle_detail_callback, pattern=r"^detail:")
     )

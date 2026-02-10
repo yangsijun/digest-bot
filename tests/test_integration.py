@@ -151,17 +151,15 @@ def test_save_article_duplicate(temp_db):
 
 @pytest.mark.asyncio
 async def test_full_digest_pipeline(temp_db, mock_env_vars):
-    """Test the full digest pipeline from fetch to send."""
+    """Test the full digest pipeline from fetch to list message."""
     with (
         patch("src.scheduler.fetch_all_sources") as mock_fetch,
-        patch("src.scheduler.summarize_article") as mock_summarize,
         patch("src.scheduler.Bot") as mock_bot_class,
         patch("src.scheduler.DATABASE_PATH", temp_db),
         patch("src.scheduler.TELEGRAM_BOT_TOKEN", "test_token"),
         patch("src.scheduler.TELEGRAM_CHAT_ID", "12345"),
         patch("src.scheduler.LOCK_FILE_PATH", Path(tempfile.mktemp())),
     ):
-        # Mock fetched articles
         mock_fetch.return_value = [
             {
                 "url": f"https://example.com/{i}",
@@ -172,32 +170,24 @@ async def test_full_digest_pipeline(temp_db, mock_env_vars):
             for i in range(5)
         ]
 
-        # Mock summarizer
-        mock_summarize.return_value = "## Summary\nTest summary\n\n## Insights\n- Insight 1\n\n## Action Items\n- Action 1"
-
-        # Mock Telegram bot
         mock_bot = AsyncMock()
         mock_bot.send_message = AsyncMock()
         mock_bot_class.return_value = mock_bot
 
-        # Run digest
         await run_digest("morning")
 
-        # Verify articles were saved to database
         conn = sqlite3.connect(temp_db)
         cursor = conn.cursor()
         cursor.execute("SELECT COUNT(*) FROM articles")
         article_count = cursor.fetchone()[0]
-
-        cursor.execute("SELECT COUNT(*) FROM summaries WHERE batch = 'morning'")
-        summary_count = cursor.fetchone()[0]
         conn.close()
 
         assert article_count == 5
-        assert summary_count == 5
 
-        # Verify Telegram messages were sent
-        assert mock_bot.send_message.call_count >= 1
+        assert mock_bot.send_message.call_count == 1
+        call_kwargs = mock_bot.send_message.call_args[1]
+        assert "테크 다이제스트" in call_kwargs["text"]
+        assert "reply_markup" in call_kwargs
 
 
 @pytest.mark.asyncio
@@ -205,14 +195,12 @@ async def test_digest_deduplication(temp_db, mock_env_vars):
     """Test that duplicate articles are properly deduplicated."""
     with (
         patch("src.scheduler.fetch_all_sources") as mock_fetch,
-        patch("src.scheduler.summarize_article") as mock_summarize,
         patch("src.scheduler.Bot") as mock_bot_class,
         patch("src.scheduler.DATABASE_PATH", temp_db),
         patch("src.scheduler.TELEGRAM_BOT_TOKEN", "test_token"),
         patch("src.scheduler.TELEGRAM_CHAT_ID", "12345"),
         patch("src.scheduler.LOCK_FILE_PATH", Path(tempfile.mktemp())),
     ):
-        # Mock articles with duplicates
         mock_fetch.return_value = [
             {
                 "url": "https://example.com/1",
@@ -225,7 +213,7 @@ async def test_digest_deduplication(temp_db, mock_env_vars):
                 "title": "Article 1",
                 "content": "Content",
                 "source": "geeknews",
-            },  # Duplicate
+            },
             {
                 "url": "https://example.com/2",
                 "title": "Article 2",
@@ -234,22 +222,19 @@ async def test_digest_deduplication(temp_db, mock_env_vars):
             },
         ]
 
-        mock_summarize.return_value = "Test summary"
-
         mock_bot = AsyncMock()
         mock_bot.send_message = AsyncMock()
         mock_bot_class.return_value = mock_bot
 
         await run_digest("morning")
 
-        # Verify only unique articles were saved
         conn = sqlite3.connect(temp_db)
         cursor = conn.cursor()
         cursor.execute("SELECT COUNT(DISTINCT url) FROM articles")
         unique_count = cursor.fetchone()[0]
         conn.close()
 
-        assert unique_count == 2  # Only 2 unique URLs
+        assert unique_count == 2
 
 
 @pytest.mark.asyncio
@@ -257,14 +242,12 @@ async def test_digest_with_fetcher_failure(temp_db, mock_env_vars):
     """Test that digest continues even if one fetcher fails."""
     with (
         patch("src.scheduler.fetch_all_sources") as mock_fetch,
-        patch("src.scheduler.summarize_article") as mock_summarize,
         patch("src.scheduler.Bot") as mock_bot_class,
         patch("src.scheduler.DATABASE_PATH", temp_db),
         patch("src.scheduler.TELEGRAM_BOT_TOKEN", "test_token"),
         patch("src.scheduler.TELEGRAM_CHAT_ID", "12345"),
         patch("src.scheduler.LOCK_FILE_PATH", Path(tempfile.mktemp())),
     ):
-        # Mock with some successful articles
         mock_fetch.return_value = [
             {
                 "url": "https://example.com/1",
@@ -274,18 +257,15 @@ async def test_digest_with_fetcher_failure(temp_db, mock_env_vars):
             },
         ]
 
-        mock_summarize.return_value = "Test summary"
-
         mock_bot = AsyncMock()
         mock_bot.send_message = AsyncMock()
         mock_bot_class.return_value = mock_bot
 
         await run_digest("evening")
 
-        # Verify at least one article was processed
         conn = sqlite3.connect(temp_db)
         cursor = conn.cursor()
-        cursor.execute("SELECT COUNT(*) FROM summaries WHERE batch = 'evening'")
+        cursor.execute("SELECT COUNT(*) FROM articles")
         count = cursor.fetchone()[0]
         conn.close()
 
@@ -299,22 +279,18 @@ async def test_digest_lock_prevents_concurrent_runs(temp_db, mock_env_vars):
 
     with (
         patch("src.scheduler.fetch_all_sources") as mock_fetch,
-        patch("src.scheduler.summarize_article") as mock_summarize,
         patch("src.scheduler.Bot") as mock_bot_class,
         patch("src.scheduler.DATABASE_PATH", temp_db),
         patch("src.scheduler.LOCK_FILE_PATH", lock_path),
     ):
         mock_fetch.return_value = []
-        mock_summarize.return_value = "Test summary"
 
         mock_bot = AsyncMock()
         mock_bot.send_message = AsyncMock()
         mock_bot_class.return_value = mock_bot
 
-        # First run should succeed
         await run_digest("morning")
 
-        # Lock file should be cleaned up after run
         assert not lock_path.exists()
 
 

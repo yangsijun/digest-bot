@@ -1,8 +1,12 @@
+import asyncio
 import logging
 from typing import List, Dict
 from telegram import Update
+from telegram.constants import ParseMode
 from telegram.ext import ContextTypes
 from ..db import get_db_connection
+from ..summarizer import summarize_article
+from .keyboards import get_article_keyboard
 
 logger = logging.getLogger(__name__)
 
@@ -89,6 +93,81 @@ def save_bookmark(user_id: str, article_id: int, db_path: str = "digest.db") -> 
         return False
     finally:
         conn.close()
+
+
+async def handle_digest_item_callback(
+    update: Update, context: ContextTypes.DEFAULT_TYPE
+) -> None:
+    query = update.callback_query
+    await query.answer()
+
+    article_id = int(query.data.split(":")[1])
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute(
+            "SELECT id, source, url, title, content FROM articles WHERE id = ?",
+            (article_id,),
+        )
+        row = cursor.fetchone()
+        if not row:
+            await query.message.reply_text("기사를 찾을 수 없습니다.")
+            return
+
+        article = {
+            "source": row["source"],
+            "url": row["url"],
+            "title": row["title"],
+            "content": row["content"] or "",
+        }
+
+        cursor.execute(
+            "SELECT summary_text FROM summaries WHERE article_id = ? ORDER BY id DESC LIMIT 1",
+            (article_id,),
+        )
+        summary_row = cursor.fetchone()
+    finally:
+        conn.close()
+
+    if summary_row and summary_row["summary_text"]:
+        summary = summary_row["summary_text"]
+    else:
+        await query.message.reply_text(
+            f"⏳ <b>{article['title']}</b> 요약 생성 중...",
+            parse_mode=ParseMode.HTML,
+        )
+        summary = await asyncio.to_thread(summarize_article, article)
+        if not summary:
+            summary = "요약을 생성할 수 없습니다."
+
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        try:
+            cursor.execute(
+                "INSERT INTO summaries (article_id, summary_text, batch) VALUES (?, ?, 'manual')",
+                (article_id, summary),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
+    source_emoji = {"hn": "🔶", "geeknews": "🇰🇷", "github": "🐙", "producthunt": "🚀"}
+    emoji = source_emoji.get(article["source"], "📰")
+
+    message_text = (
+        f"<b>{emoji} {article['title']}</b>\n\n"
+        f"{summary}\n\n"
+        f'🔗 <a href="{article["url"]}">원문 보기</a>'
+    )
+    keyboard = get_article_keyboard(article_id)
+
+    await query.message.reply_text(
+        text=message_text,
+        parse_mode=ParseMode.HTML,
+        reply_markup=keyboard,
+        disable_web_page_preview=True,
+    )
 
 
 def get_bookmarks(user_id: str, db_path: str = "digest.db") -> List[Dict]:
