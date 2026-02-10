@@ -6,14 +6,20 @@ import time
 
 logger = logging.getLogger("digest_bot")
 
+import shutil
+
+_claude_path = shutil.which("claude") or "/home/sijun/.local/bin/claude"
+
 CLAUDE_COMMAND = [
-    "claude",
+    _claude_path,
     "-p",
     "--model",
     "sonnet",
     "--fallback-model",
     "haiku",
     "--no-session-persistence",
+    "--allowedTools",
+    "WebFetch",
 ]
 
 MAX_CONTENT_LENGTH = 10_000
@@ -21,6 +27,7 @@ RETRY_DELAYS = (2, 4, 8)
 
 PROMPT_TEMPLATE = (
     "Summarise the following tech news in British English (5-7 sentences).\n"
+    "If the provided content is sparse, visit the URL to read the full article.\n"
     "Include:\n"
     "1. Key insights for software developers\n"
     "2. Actionable recommendations\n"
@@ -66,6 +73,7 @@ def summarize_article(article: dict) -> str:
                 text=True,
                 capture_output=True,
                 check=False,
+                timeout=120,
             )
             output = result.stdout.strip()
             if result.returncode == 0 and output:
