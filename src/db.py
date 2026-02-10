@@ -43,7 +43,7 @@ def init_db(db_path: str = "digest.db"):
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 article_id INTEGER NOT NULL,
                 summary_text TEXT NOT NULL,
-                batch TEXT CHECK(batch IN ('morning', 'evening')),
+                batch TEXT CHECK(batch IN ('morning', 'evening', 'manual')),
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY (article_id) REFERENCES articles(id) ON DELETE CASCADE
             )
