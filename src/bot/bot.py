@@ -89,6 +89,16 @@ async def digest_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         "다이제스트를 생성 중입니다... 잠시만 기다려주세요.", parse_mode=ParseMode.HTML
     )
 
+    try:
+        from src.scheduler import run_digest
+
+        await run_digest("manual")
+    except Exception as e:
+        logger.error(f"Digest generation failed: {e}", exc_info=True)
+        await message.reply_text(
+            f"다이제스트 생성 실패: {e}", parse_mode=ParseMode.HTML
+        )
+
 
 async def search_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     message = update.message
