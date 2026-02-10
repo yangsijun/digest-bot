@@ -1,10 +1,10 @@
 #!/bin/bash
-# News Digest Bot - Installation Script
-# This script sets up the digest-bot systemd service and configures automatic startup
+# Installation script for News Digest Bot
+# This script sets up the systemd service and configures the environment
 
-set -e  # Exit on any error
+set -e
 
-# Color codes for output
+# Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
@@ -12,9 +12,10 @@ NC='\033[0m' # No Color
 
 # Configuration
 SERVICE_NAME="digest-bot"
+# Use current directory if not already in /opt
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+INSTALL_DIR="${INSTALL_DIR:-$SCRIPT_DIR}"
 SERVICE_FILE="digest-bot.service"
-INSTALL_DIR="/opt/digest-bot"
-SERVICE_DIR="/etc/systemd/system"
 BACKUP_SCRIPT="cron/backup.sh"
 CRON_LOG="/var/log/digest-bot-backup.log"
 
