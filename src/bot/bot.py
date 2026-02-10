@@ -49,7 +49,7 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         "/start - 시작 메시지\n"
         "/help - 도움말\n"
         "/digest - 오늘의 다이제스트 생성\n"
-        "/search <키워드> - 요약 검색\n"
+        "/search &lt;키워드&gt; - 요약 검색\n"
         "/bookmarks - 저장한 북마크 보기\n"
         "/settings - 스케줄 설정 보기"
     )
@@ -68,7 +68,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         "/start - 봇 시작 및 환영 메시지\n"
         "/help - 이 도움말 표시\n"
         "/digest - 오늘의 기술 뉴스 다이제스트 생성\n"
-        "/search <키워드> - 요약에서 키워드 검색\n"
+        "/search &lt;키워드&gt; - 요약에서 키워드 검색\n"
         "/bookmarks - 저장한 북마크 목록 보기\n"
         "/settings - 현재 스케줄 설정 확인\n\n"
         "<b>기능:</b>\n"
@@ -97,7 +97,7 @@ async def search_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
     if not context.args:
         await message.reply_text(
-            "사용법: /search <키워드>\n예: /search AI", parse_mode=ParseMode.HTML
+            "사용법: /search &lt;키워드&gt;\n예: /search AI", parse_mode=ParseMode.HTML
         )
         return
 
